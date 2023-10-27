@@ -37,18 +37,19 @@ lemma subset_nowhere_dense {A B:Set X} (hA: NowhereDense A) (h: B⊆A ) : Nowher
     exact Iff.mp Set.subset_empty_iff h1
 
 
+lemma union_of_nowhere_dense {P Q : Set X} (hP: NowhereDense P) (hQ: NowhereDense Q) : NowhereDense (P ∪ Q) := by
+  unfold NowhereDense at *
+  rw [closure_union]
+  have closure_closed : IsClosed (closure P) := by
+    exact isClosed_closure
+  have temp:= interior_union_isClosed_of_interior_empty (closure_closed) (hQ)
+  rw [hP] at temp
+  exact temp
+
+
 lemma finite_union_of_nowhere_dense {n:ℕ} {A: ℕ  → Set X} (hA : ∀i < n, NowhereDense (A i) ):
   NowhereDense (⋃ i<n, A i) :=  by
-    have sufficient : ∀P Q:Set X, (NowhereDense P ∧ NowhereDense Q) → NowhereDense (P ∪ Q) := by
-      intro P Q hPQ
-      rcases hPQ with ⟨hP,hQ⟩
-      unfold NowhereDense at *
-      rw [closure_union]
-      have closure_closed : IsClosed (closure P) := by
-        exact isClosed_closure
-      have temp:= interior_union_isClosed_of_interior_empty (closure_closed) (hQ)
-      rw [hP] at temp
-      exact temp
+    sorry
     /-INDUCTION-/
 
 
@@ -78,13 +79,56 @@ lemma subset_meager {A B: Set X} (hA: meager A) (h: B⊆ A) : meager B := by
   unfold meager at *
   rcases hA with ⟨U, hA⟩
 
-  use U
+  use fun i:ℕ ↦ B ∩ (U i)
   constructor
+  {
+    intro i
+    have temp : (B ∩ (U i)) ⊆ U i := by
+      exact Set.inter_subset_right B (U i)
+    have temp2 := hA.1 i
+    exact subset_nowhere_dense temp2 temp
+  }
+  {
+    have temp : ⋃ (i : ℕ), B ∩ U i = B ∩ (⋃ (i : ℕ), U i) := by
+      exact Eq.symm (Set.inter_iUnion B fun i ↦ U i)
+    rw [temp]
+    rw [← hA.2]
+    have final := Set.inter_eq_left_iff_subset.2 h
 
+    rw [final]
+
+  }
+
+lemma union_meager {P Q : Set X} (hP: meager P) (hQ: meager Q) : meager (P ∪ Q) := by
+  unfold meager at *
+  rcases hP with ⟨R,hP⟩
+  rcases hQ with ⟨S,hQ⟩
+  rcases hP with ⟨hPA,hPB⟩
+  rcases hQ with ⟨hQA,hQB⟩
+  use (fun i ↦ (R i) ∪ (S i))
+  constructor
+  {
+    intro i
+
+    specialize hPA i
+    specialize hQA i
+
+    exact union_of_nowhere_dense hPA hQA
+
+  }
+  {
+    rw [hPB, hQB]
+    exact Eq.symm (Set.iUnion_union_distrib (fun i ↦ R i) fun i ↦ S i)
+
+    }
 
 
 lemma countable_union_meager {A: ℕ → Set X} (hA: ∀i: ℕ, meager (A i)): meager (⋃ i, A i) := by
   sorry
+
+
+
+
 
 lemma no_isolated_imp_countable_meager (h: ∀x:X, ¬(isolated_point x)) : ∀A:Set X, Set.Countable A → meager A := by
   sorry
