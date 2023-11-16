@@ -9,25 +9,39 @@ universe u
 variable {X: Type u} [MetricSpace X]
 
 
+
+/-
+
+BAIRE CATEGORY THEOREM FORMALIZATION
+Riyaz Ahuja
+
+-/
+
+
+/-Basic definitions-/
 def cauchy (a: ℕ → X) : Prop := ∀ε>0, ∃N: ℕ, ∀n m : ℕ, ((m≥ N ∧ n ≥ N) → dist (a n) (a m) < ε)
 
 def convergent (a: ℕ → X) : Prop := ∃L:X, ∀ ε>0, ∃N: ℕ, ∀n:ℕ, n≥ N → dist (a n) L < ε
 
-
-
-
 def NowhereDense (A: Set X) : Prop :=
   interior (closure (A)) = ∅
-
-
 
 def limit_point (x: X) : Prop :=
 ∀ ε > 0, ∃ y : X, y ≠ x ∧ dist y x < ε
 
-
 def isolated_point (x : X) : Prop := ¬(limit_point x)
 
+def meager (A : Set X) : Prop := ∃ (U : ℕ → Set X), (∀ i, NowhereDense (U i)) ∧ A = ⋃ i, U i
 
+def nonmeager (A : Set X) : Prop := ¬meager A
+
+def residual (A: Set X) : Prop := meager Aᶜ
+
+
+
+
+
+/-Useful/Interesting Lemmas-/
 lemma subset_nowhere_dense {A B:Set X} (hA: NowhereDense A) (h: B⊆A ) : NowhereDense B := by
     unfold NowhereDense at *
     have h1 : interior (closure B) ⊆ interior (closure A) := by
@@ -47,36 +61,29 @@ lemma union_of_nowhere_dense {P Q : Set X} (hP: NowhereDense P) (hQ: NowhereDens
   exact temp
 
 
-lemma finite_union_of_nowhere_dense {n:ℕ} {A: ℕ  → Set X} (hA : ∀i < n, NowhereDense (A i) ):
-  NowhereDense (⋃ i<n, A i) :=  by
+lemma finite_union_of_nowhere_dense_single (A:Set X) (A_fin : Set.Finite A) (hA : ∀ x∈A, NowhereDense {x}) : NowhereDense (⋃ x∈ A, {x}) := by
+  have finite_is_singleton_union : A = ⋃ x ∈ A, {x} := by
+        exact (Set.biUnion_of_singleton A).symm
+  apply Set.Finite.induction_on'
 
-    induction' n with m ih
-    {
-      rw [Nat.zero_eq] at *
-      unfold NowhereDense
-      simp
-    }
-    {
-      rw [← Nat.add_one] at *
-      have hA' :  ∀ (i : ℕ), i < m → NowhereDense (A i) := by
-        intro i hi
-        have duh : i < m+1 := by linarith
-        specialize hA i duh
-        exact hA
+  {
 
-      have h_union_nd : NowhereDense (⋃ i < m, A i) := ih hA'
+    rw [← finite_is_singleton_union]
+    exact A_fin
+  }
+  {
+    unfold NowhereDense
+    simp
+  }
+  {
+    intro a S ha hS haS hS_nd
+    rw [@Set.insert_eq]
+    rw [← finite_is_singleton_union] at ha
+    rw [← finite_is_singleton_union] at hS
 
-      have last_nd : NowhereDense (A m) := by
-        have fin := hA m
-        have duh : m < m+1 := by linarith
-        exact fin duh
-
-      /-FINISH!!!!!!!!-/
-
-    }
-
-
-
+    specialize hA a ha
+    exact union_of_nowhere_dense hA hS_nd
+  }
 
 
 
@@ -90,7 +97,7 @@ lemma closure_nowhere_dense {A: Set X} (hA: NowhereDense A) : NowhereDense (clos
 lemma no_isolated_imp_finite_nowhere_dense (h: (∀x : X, ¬isolated_point x)) : ∀ A:Set X, Set.Finite A → NowhereDense A := by
   intro A hA
   /-We know A is union of singletons-/
-  have temp : ∀ x: X, IsOpen {x} ↔ isolated_point x := by
+  have iso_pt_property : ∀ x: X, IsOpen {x} ↔ isolated_point x := by
     intro x
     rw [@Metric.isOpen_singleton_iff]
     constructor
@@ -127,38 +134,83 @@ lemma no_isolated_imp_finite_nowhere_dense (h: (∀x : X, ¬isolated_point x)) :
 
 
 
-  have list_A := (Set.Finite.toFinset hA).toList
 
-  have sizeA := List.length list_A
-
-  have finite_is_singleton_union : N := by
-    use fun i:Fin (List.length list_A)  ↦ {list_A.get i}
+  have finite_is_singleton_union : A = ⋃ x ∈ A, {x} := by
+    exact (Set.biUnion_of_singleton A).symm
 
 
 
+  have :∀x:X, x∈ A → NowhereDense {x}:= by
+    intro x _
+    unfold NowhereDense
+    have :closure {x} = {x} := by
+      exact closure_singleton
+    rw [this]
+    clear this
+
+    specialize iso_pt_property x
+    specialize h x
+    rw [← iso_pt_property] at h
 
 
+    rw [Metric.isOpen_iff] at h
+    push_neg at h
+    rcases h with ⟨x',hx',imp⟩
+    have : x' = x := by exact hx'
+    rw [this] at imp
+    clear x' hx' this
+    rw [@interior_eq_empty_iff_dense_compl]
+
+    have: ∀ ε>0, ∃ a ∈ Metric.ball x ε, a ≠ x := by
+      intro ε hε
+      specialize imp ε hε
+      rw [Set.not_subset] at imp
+      peel imp with a b c
+      exact a
+
+    rw [Metric.dense_iff]
+    intro y r hr
+
+    rcases eq_or_ne x y with eq|neq
+    rw [← eq]
+    specialize this r hr
+    rcases this with ⟨a, ha⟩
+
+    have :a≠ x ↔ a ∈ {x}ᶜ:= by
+      rw [Set.mem_compl_iff]
+      constructor
+      intro hax
+      exact hax
+      intro hax
+      exact hax
+
+    rw [this] at ha
+    exact Set.inter_compl_nonempty_iff.mpr (imp r hr)
+
+    have duh : y∈ Metric.ball y r := by
+      exact Metric.mem_ball_self hr
+
+    have duhh : y∈ {x}ᶜ := by
+      rw [Set.mem_compl_iff]
+      exact id (Ne.symm neq)
+
+    have final : y ∈ Metric.ball y r ∩ {x}ᶜ := by
+      exact Set.mem_inter duh duhh
+    exact Set.nonempty_of_mem final
+
+  have that := finite_union_of_nowhere_dense_single A hA this
+  rw [← finite_is_singleton_union] at that
+  exact that
 
 
-
-
-
-
-
-
-
-
-def meager (A : Set X) : Prop := ∃ (U : ℕ → Set X), (∀ i, NowhereDense (U i)) ∧ A = ⋃ i, U i
-def nonmeager (A : Set X) : Prop := ¬meager A
-def residual (A: Set X) : Prop := meager Aᶜ
 
 
 lemma NowhereDense_imp_meager (A: Set X) (hA: NowhereDense A) : meager A := by
   unfold meager
-  use fun i ↦ A
+  use fun _ ↦ A
   constructor
   {
-    intro hm
+    intro _
     exact hA
   }
   {
@@ -185,7 +237,9 @@ lemma subset_meager {A B: Set X} (hA: meager A) (h: B⊆ A) : meager B := by
       exact Eq.symm (Set.inter_iUnion B fun i ↦ U i)
     rw [temp]
     rw [← hA.2]
-    have final := Set.inter_eq_left_iff_subset.2 h
+
+
+    have final := Set.inter_eq_left.2 h
 
     rw [final]
 
@@ -212,7 +266,7 @@ lemma union_meager {P Q : Set X} (hP: meager P) (hQ: meager Q) : meager (P ∪ Q
     rw [hPB, hQB]
     exact Eq.symm (Set.iUnion_union_distrib (fun i ↦ R i) fun i ↦ S i)
 
-    }
+  }
 
 
 
@@ -254,21 +308,7 @@ lemma countable_union_meager {A: ℕ → Set X} (hA: ∀i: ℕ, meager (A i)): m
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/-Baire Space Definition and Alternative Categorizations-/
 variable (X)
 def BaireSpace  : Prop := ∀A:Set X, meager A → interior A = ∅
 
@@ -294,8 +334,6 @@ lemma BaireSpace_comp_meager_dense: BaireSpace X ↔ (∀ A:Set X, meager (Aᶜ)
     have fact := interior_eq_empty_iff_dense_compl.2 h
     exact fact
   }
-
-
 
 
 
@@ -396,7 +434,7 @@ lemma BaireSpace_dense_intersection : BaireSpace X ↔ (∀ A: ℕ → Set X, (�
 
 
 
-
+/-Useful lemma for BCT-/
 
 def Complete : Prop := ∀a:ℕ→ X, cauchy a → convergent a
 
@@ -507,7 +545,11 @@ lemma shrinking_closed_set_property (hX: Complete X) (F: ℕ→ Set X)
 
 
 
+/-
 
+BAIRE CAREGORY THEOREM
+
+-/
 open Filter Topology
 
 theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
@@ -529,14 +571,6 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
   intro U hU_open hU_nonempty
 
 
-
-
-
-
-
-
-
-
   let a:ℕ → ℝ:= fun n ↦ 1/n
 
   have : Tendsto a atTop (𝓝 0) := by
@@ -555,8 +589,7 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
       simp
     rw [← fact (a n)] at this
 
-    have fact : a n ≤ |a n| := by
-      exact le_abs_self (a n)
+
     exact lt_of_abs_lt this
 
 
@@ -618,7 +651,7 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
 
       constructor
       {
-        have hm := ha_pos (n+1) (Nat.succ_pos n)
+
         have hε2 : ε/2 >0 := half_pos hε
 
         exact lt_min hε2 (ha_pos (n + 1) (Nat.succ_pos n))
@@ -644,7 +677,7 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
         by_contra opp
         have duh : ∀ x:X, x∉ S := by exact fun x ↦ not_of_eq_false (congrArg (Membership.mem x) opp)
         specialize duh x
-        have duhh : x∈ S:= hx
+
         exact duh hx
 
       }
@@ -705,7 +738,7 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
     use min (ε/2) (a 1)
     constructor
     {
-      have hm := ha_pos 1 ((Nat.succ_pos 0))
+
       have hε2 : ε/2 >0 := half_pos hε
 
       exact lt_min hε2 (ha_pos (1) (Nat.succ_pos 0))
@@ -757,7 +790,7 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
 
   have hr_bound : ∀ n, r n ≤ a (n+1) := by
     intro n
-    induction' n with m ih
+    induction' n with m _
     {
       simp
       simp at hr₀_am
@@ -770,7 +803,7 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
 
   have hB_chain : ∀ n, Metric.closedBall (x (n+1)) (r (n+1)) ⊆ Metric.closedBall (x n) (r n) := by
     intro n
-    induction' n with m ih
+    induction' n with m _
     {
       simp
       specialize Hball 1 x₀ r₀ hr₀_pos
