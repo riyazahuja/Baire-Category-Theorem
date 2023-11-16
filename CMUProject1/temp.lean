@@ -2,7 +2,8 @@ import Mathlib.Topology.MetricSpace.Basic
 import Mathlib.Topology.Basic
 import Mathlib.Data.Set.Basic
 import Mathlib.Data.Set.Finite
-
+import Mathlib.Analysis.SpecificLimits.Basic
+import Mathlib.Tactic
 
 universe u
 variable {X: Type u} [MetricSpace X]
@@ -402,7 +403,7 @@ def Complete : Prop := ∀a:ℕ→ X, cauchy a → convergent a
 
 lemma shrinking_closed_set_property (hX: Complete X) (F: ℕ→ Set X)
                                     (hF_chain: ∀a b:ℕ, a ≤ b → F b ⊆ F a)
-                                    (hF_bounded : ∀i:ℕ, Metric.Bounded (F i))
+                                    (hF_bounded : ∀i:ℕ, Bornology.IsBounded (F i))
                                     (hF_closed: ∀ i: ℕ, IsClosed (F i))
                                     (hF_nonempty: ∀i:ℕ, F i ≠ ∅)
                                     (h_diam_conv: ∀ε>0, ∃N:ℕ, ∀n≥ N, Metric.diam (F n) < ε)
@@ -507,8 +508,7 @@ lemma shrinking_closed_set_property (hX: Complete X) (F: ℕ→ Set X)
 
 
 
-
-
+open Filter Topology
 
 theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
   rw [BaireSpace_dense_intersection]
@@ -527,25 +527,42 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
 
   rw [dense_iff_inter_open]
   intro U hU_open hU_nonempty
+
+
+
+
+
+
+
+
+
+
   let a:ℕ → ℝ:= fun n ↦ 1/n
+
+  have : Tendsto a atTop (𝓝 0) := by
+    unfold_let a
+    rw [← tendsto_add_atTop_iff_nat 1]
+    push_cast
+    exact tendsto_one_div_add_atTop_nhds_0_nat
+
   have ha_conv : ∀ ε>0, ∃N:ℕ, ∀n≥ N, a n < ε := by
+    rw [Metric.tendsto_atTop] at this
+    peel this with ha ε ε_pos N n hn
+    have : |a n - 0| < ε := by
+      exact ha
+    have fact : ∀r : ℝ, |r| = |r-0| := by
+      intro r
+      simp
+    rw [← fact (a n)] at this
+
+    have fact : a n ≤ |a n| := by
+      exact le_abs_self (a n)
+    exact lt_of_abs_lt this
 
 
-    intro ε hε
-    rcases exists_nat_gt (1/ε) with ⟨N, hN⟩
-    use N
-    intro n hn
 
-    have fact : ↑N ≤ ↑n := hn
-    have fact2 : 1/ε< ↑n := by
-      exact_mod_cast lt_of_lt_of_le hN fact
-    /-HELP!!!!!!!-/
 
-    dsimp
-    have fact3 : 0 < 1/ε:= by
-      exact Iff.mpr one_div_pos hε
-    refine Iff.mpr (one_div_lt ?h.ha hε) fact2
-    exact lt_trans fact3 fact2
+
 
 
   have ha_pos : ∀n:ℕ, n> 0 → a n > 0 := by
@@ -657,25 +674,33 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
       }
     }
 
-  choose! center radius Hpos Ha Hball using construction
+
   /- center(n)(old_x)(old_r) = x
      radius(n)(old_x)(old_r) = r -/
 
-  /-Now, want to show that there exists x:ℕ → X and r: ℕ → ℝ such that 0 < r n ≤ a (n+1)
-    and closedBall(x (i+1), r (i+1)) ⊆ closedBall(x i,r i) for all i:ℕ,
-    and as diam closedBall(x i, r i) = r i ≤ a (n+1), diam converges to 0,
-    so ⋂ i, closedBall(x i, r i) = {L}.
 
-    Now, want to show that for all i:ℕ,
-    closedBall(x i, r i) ⊆ closedBall(x (i-1), r (i-1)) ∩ A i ⊆ ... ⊆ closedBall(x 0, r 0) ∩ V i ⊆ U ∩ A i
-    Thus, L ∈ U ∩ A i for all i:ℕ, and thus L ∈ ⋂ i, (U ∩ A i)
-  -/
 
-  /- Want to show that there exists x₀ r₀ such that closedBall(x₀,r₀) ⊆ U -/
-  have initialize_process : ∃ x: X, ∃ r : ℝ, 0<r ∧ r≤ (a 1) ∧ Metric.closedBall x r ⊆ U := by
-    rcases hU_nonempty with ⟨x,hx⟩
-    have :=  Metric.isOpen_iff.1 hU_open x hx
-    rcases this with ⟨ε,hε,h ⟩
+  /- Want to show that there exists x₀ r₀ such that closedBall(x₀,r₀) ⊆ U ∩ A 0-/
+  have initialize_process : ∃ x: X, ∃ r : ℝ, 0<r ∧ r≤ (a 1) ∧ Metric.closedBall x r ⊆ U ∩ A 0:= by
+    rcases hU_nonempty with ⟨x',hx'⟩ /-Shows ∃x ∈ U-/
+    have :=  Metric.isOpen_iff.1 hU_open x' hx' /-Shows ∃ε>0 such that Metric.Ball(x,ε)⊆ U  -/
+    rcases this with ⟨ε',hε',h' ⟩
+
+    /-WTS there ∃ ε'>0 such that Metric.Ball(x,ε')⊆ A 0-/
+    have := Metric.dense_iff.1 (hAd 0) x' ε' hε'
+    rcases this with ⟨x,hx''⟩
+    have hx : x∈ U ∩ A 0 := by
+      constructor
+      exact h' hx''.1
+      exact hx''.2
+    clear x' hx' ε' hε' h' hx''
+    have fact : IsOpen (U ∩ A 0) := by
+      exact IsOpen.inter hU_open (hAo 0)
+
+    have :=  Metric.isOpen_iff.1 fact x hx /-Shows ∃ε>0 such that Metric.Ball(x,ε)⊆ U  -/
+    rcases this with ⟨ε,hε,h⟩
+
+
     use x
     use min (ε/2) (a 1)
     constructor
@@ -698,17 +723,68 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
         have fact2 : Metric.closedBall x (ε / 2) ⊆ Metric.ball x ε := by
           have fact3 : ε/2 < ε := by exact half_lt_self hε
           exact Metric.closedBall_subset_ball fact3
-        exact subset_trans fact (subset_trans fact2 h)
+
+        have fact4 : Metric.closedBall x (min (ε / 2) (a 1)) ⊆ U ∩ A 0:= subset_trans fact (subset_trans fact2 h)
+
+        exact fact4
+
       }
     }
 
+
   rcases initialize_process with ⟨x₀, r₀ ,hr₀_pos, hr₀_am, h₀⟩
 
+  choose! center radius Hpos Ha Hball using construction
 
 
-  def f : (ℕ × (X × ℝ)) → X × ℝ
-  | (0,(x₀,r₀))     => (x₀,r₀)
-  | (n+1,(x₀,r₀)) => (center (n+1) (f n).1 (f n).2, radius (n+1) (f n).1 (f n).2)
+  let f : ℕ → (X × ℝ) := fun n ↦ Nat.recOn n (x₀,r₀) (fun m ↦ fun ih ↦ (center (m+1) ih.1 ih.2, radius (m+1) ih.1 ih.2))
+  let x:ℕ → X:= fun n ↦ (f n).1
+  let r:ℕ → ℝ:= fun n ↦ (f n).2
+
+
+  have hr_pos : ∀ n, 0 < r n := by
+    intro n
+    induction' n with m ih
+    {
+      simp
+      exact hr₀_pos
+    }
+    {
+      dsimp
+      specialize Hpos (m+1) (x m) (r m) ih
+      exact Hpos
+    }
+
+  have hr_bound : ∀ n, r n ≤ a (n+1) := by
+    intro n
+    induction' n with m ih
+    {
+      simp
+      simp at hr₀_am
+      exact hr₀_am
+    }
+    {
+      specialize Ha (m+1) (x m) (r m) (hr_pos m)
+      exact Ha
+    }
+
+  have hB_chain : ∀ n, Metric.closedBall (x (n+1)) (r (n+1)) ⊆ Metric.closedBall (x n) (r n) := by
+    intro n
+    induction' n with m ih
+    {
+      simp
+      specialize Hball 1 x₀ r₀ hr₀_pos
+      have duh : Metric.closedBall x₀ r₀ ∩ A 1 ⊆ Metric.closedBall x₀ r₀ := by
+            exact Set.inter_subset_left (Metric.closedBall x₀ r₀) (A 1)
+      exact Set.Subset.trans Hball duh
+    }
+    {
+      specialize Hball (m+2) (x (m+1)) (r (m+1)) (hr_pos (m+1))
+
+      have duh :  Metric.closedBall (x (m + 1)) (r (m + 1)) ∩ A (m + 2) ⊆  Metric.closedBall (x (m + 1)) (r (m + 1)) := by
+            exact Set.inter_subset_left (Metric.closedBall (x (m + 1)) (r (m + 1))) (A (m + 2))
+      exact Set.Subset.trans Hball duh
+    }
 
 
 
@@ -716,6 +792,127 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
 
 
 
+  have hB_containment : ∀n, Metric.closedBall (x n) (r n) ⊆ U ∩ A n := by
+    intro n
+    induction' n with m ih
+    {
+      simp
+      exact Iff.mp Set.subset_inter_iff h₀
+    }
+    {
+
+      specialize Hball (m+1) (x (m)) (r m) (hr_pos m)
+
+      have := (Set.subset_inter_iff.1 Hball).2
+      have Acase : Metric.closedBall (x (Nat.succ m)) (r (Nat.succ m)) ⊆ A (Nat.succ m) := by
+        exact this
+      clear this
+      clear this
+
+
+
+
+      have : Metric.closedBall (x (m+1)) (r (m+1)) ⊆ Metric.closedBall (x (m)) (r (m)) := by
+        exact hB_chain m
+      have fact := (Set.subset_inter_iff.1 (subset_trans this ih)).1
+
+      exact Set.subset_inter fact Acase
+
+    }
+
+  have hB_diam_conv : ∀ε >0, ∃ N:ℕ, ∀n≥N, Metric.diam (Metric.closedBall (x n) (r n)) < ε := by
+    have diam_eq : ∀ n:ℕ, Metric.diam (Metric.closedBall (x n) (r n)) ≤ 2 * (r n) := by
+      intro n
+      exact Metric.diam_closedBall (LT.lt.le (hr_pos n))
+
+    intro ε hε
+    specialize ha_conv (ε/2) (half_pos hε)
+    rcases ha_conv with ⟨N,hN⟩
+    use N
+    intro n hn
+    specialize hN (n+1) (Nat.le_step hn)
+    have fact : 2 * (a (n+1)) < ε := by linarith
+
+    have fact2 : 2* (r n) ≤ 2* (a (n+1)) := by
+      refine mul_le_mul_of_nonneg_left (hr_bound n) ?a0
+      linarith
+
+    have : 2*(r n) < ε:= by exact LE.le.trans_lt fact2 fact
+    specialize diam_eq n
+    exact LE.le.trans_lt diam_eq this
+
+
+  have hB_bounded : ∀n:ℕ, Bornology.IsBounded (Metric.closedBall (x n) (r n)):= by
+    intro n
+    exact Metric.isBounded_closedBall
+
+  clear Hpos Ha Hball
+  clear ha_conv this ha_pos
+
+  have hB_chain' : ∀n m:ℕ, n ≤ m → Metric.closedBall (x m) (r m) ⊆ Metric.closedBall (x n) (r n) := by
+    intro n m hnm
+    induction' m with k ih
+    {
+      have : n = 0:= by exact Nat.le_zero.mp hnm
+      rw [this]
+      exact Eq.subset rfl
+    }
+    {
+      rcases hnm with equal | less_than
+      {
+        exact Eq.subset rfl
+      }
+      {
+        specialize ih less_than
+        exact Set.Subset.trans (hB_chain k) ih
+      }
+    }
+
+  have hB_closed : ∀ n:ℕ, IsClosed (Metric.closedBall (x n) (r n)):= by
+    intro n
+    exact Metric.isClosed_ball
+
+  have hB_nonempty : ∀ n:ℕ, (Metric.closedBall (x n) (r n)) ≠ ∅ := by
+    intro n
+    by_contra opp
+    push_neg at opp
+
+    have := Metric.closedBall_eq_empty.1 opp
+    have that := hr_pos n
+    linarith
+
+  /-YAY! Now we can apply shrinking closed set property!-/
+
+
+  have chain_is_singleton : ∃ L:X, ⋂ i:ℕ, Metric.closedBall (x i) (r i) = {L} :=
+    shrinking_closed_set_property (hX) (fun i ↦ Metric.closedBall (x i) (r i))
+                                    (hB_chain')
+                                    (hB_bounded)
+                                    (hB_closed)
+                                    (hB_nonempty)
+                                    (hB_diam_conv)
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /-Now, want to show that there exists x:ℕ → X and r: ℕ → ℝ such that 0 < r n ≤ a (n+1)
+    and closedBall(x (i+1), r (i+1)) ⊆ closedBall(x i,r i) for all i:ℕ,
+    and as diam closedBall(x i, r i) = r i ≤ a (n+1), diam converges to 0,
+    so ⋂ i, closedBall(x i, r i) = {L}.
+
+    Now, want to show that for all i:ℕ,
+    closedBall(x i, r i) ⊆ closedBall(x (i-1), r (i-1)) ∩ A i ⊆ ... ⊆ closedBall(x 0, r 0) ∩ V i ⊆ U ∩ A i
+    Thus, L ∈ U ∩ A i for all i:ℕ, and thus L ∈ ⋂ i, (U ∩ A i)
+  -/
 
 
 
