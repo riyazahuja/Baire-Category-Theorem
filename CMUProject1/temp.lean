@@ -885,7 +885,7 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
 
 
   have chain_is_singleton : ∃ L:X, ⋂ i:ℕ, Metric.closedBall (x i) (r i) = {L} :=
-    shrinking_closed_set_property (hX) (fun i ↦ Metric.closedBall (x i) (r i))
+    shrinking_closed_set_property X hX (fun i ↦ Metric.closedBall (x i) (r i))
                                     (hB_chain')
                                     (hB_bounded)
                                     (hB_closed)
@@ -895,44 +895,31 @@ theorem Baire_Category_Theorem :  Complete X → BaireSpace X := by
 
 
 
+  rcases chain_is_singleton with ⟨L,hL⟩
+
+  have subfact : ⋂ i, Metric.closedBall (x i) (r i) ⊆ U ∩ ⋂ i, A i := by
+    intro B hB
+    constructor
+    {
+      have fact: B ∈ Metric.closedBall (x 0) (r 0) := by
+        apply Set.mem_iInter.1 at hB
+        specialize hB 0
+        exact hB
 
 
+      exact Set.mem_of_mem_inter_left (h₀ fact)
+    }
+    {
+      have fact : ⋂ i, Metric.closedBall (x i) (r i) ⊆ ⋂ i, A i := by
+        apply Set.iInter_mono
+        intro i
+        specialize hB_containment i
 
+        have : U ∩ A i ⊆ A i:= by
+          exact Set.inter_subset_right U (A i)
+        exact Set.Subset.trans hB_containment this
+      exact fact hB
+    }
 
-
-
-
-
-
-  /-Now, want to show that there exists x:ℕ → X and r: ℕ → ℝ such that 0 < r n ≤ a (n+1)
-    and closedBall(x (i+1), r (i+1)) ⊆ closedBall(x i,r i) for all i:ℕ,
-    and as diam closedBall(x i, r i) = r i ≤ a (n+1), diam converges to 0,
-    so ⋂ i, closedBall(x i, r i) = {L}.
-
-    Now, want to show that for all i:ℕ,
-    closedBall(x i, r i) ⊆ closedBall(x (i-1), r (i-1)) ∩ A i ⊆ ... ⊆ closedBall(x 0, r 0) ∩ V i ⊆ U ∩ A i
-    Thus, L ∈ U ∩ A i for all i:ℕ, and thus L ∈ ⋂ i, (U ∩ A i)
-  -/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/-If I have time, do some cool cantor corollaries and -/
+  rw [hL] at subfact
+  exact Set.nonempty_of_mem (subfact rfl)
